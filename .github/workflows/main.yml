@@ -1,0 +1,57 @@
+name: Build mod
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack mod project
+        run: |
+          shopt -s nullglob
+          zips=(*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "ERROR: no .zip file in the repo root. Files found:"
+            ls -la
+            exit 1
+          fi
+          mkdir -p work
+          for f in "${zips[@]}"; do unzip -oq "$f" -d work; done
+          find work -maxdepth 3 | head -50
+
+      - name: Find project folder
+        id: proj
+        run: |
+          dir=work/lanternworks
+          if [ ! -f "$dir/build.gradle" ]; then
+            first=$(find work -name build.gradle | head -n 1)
+            if [ -z "$first" ]; then
+              echo "ERROR: no build.gradle found after unzipping"
+              exit 1
+            fi
+            dir=$(dirname "$first")
+          fi
+          echo "Building in $dir"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 8
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 7.4.2
+
+      - name: Build
+        working-directory: ${{ steps.proj.outputs.dir }}
+        run: gradle build --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lanternworks-1.16.5
+          path: ${{ steps.proj.outputs.dir }}/build/libs/*.jar
+        
